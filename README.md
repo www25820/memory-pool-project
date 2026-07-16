@@ -4,15 +4,16 @@
 
 ## 功能
 
-- **预分配 + 复用**：一次批发大块内存，切成固定大小槽，链表管理空闲槽，避免频繁系统调用
-- **多尺寸支持**：64 个哈希桶，管理 8B~512B 共 64 种尺寸，自动路由到对应桶
-- **无锁回收**：`std::atomic` + CAS（`compare_exchange_weak`）实现空闲链表无锁入队出队
-- **对齐填充**：每个槽起始地址对齐到槽大小倍数，提升内存访问效率
-- **大对象兜底**：超过 512B 直接走 `operator new`/`operator delete`
+- **多尺寸管理**：64 个哈希桶，8B~512B 共 64 种尺寸，`(size+7)/8-1` 自动路由
+- **CAS 无锁回收**：`std::atomic<Slot*>` + `compare_exchange_weak`，多线程安全
+- **Block 链表扩容**：curSlot_ 游标 + allocateNewBlock，Block 用完自动申请新块
+- **对齐填充**：padPointer 保证每个槽地址对齐到槽大小倍数
+- **placement new 接口**：`newElement<T>(args...)` / `deleteElement<T>(ptr)` 替换 new/delete
+- **大对象兜底**：>512B 直接走 `operator new`/`operator delete`
 
 ## 架构
 
-```
+```text
 HashBucket (64 个桶)
   ├── [0]  MemoryPool(8B)
   ├── [1]  MemoryPool(16B)
@@ -35,17 +36,20 @@ HashBucket (64 个桶)
 
 ## 编译
 
-VS Code 下打开 `memory_pool.cpp`，按 `Ctrl+Shift+B` 编译。
+VS Code 下打开 `memory_pool.cpp`，按 `Ctrl+Shift+B` 编译（已配置 `-O2` 优化）。
 
 或命令行：
 
 ```bash
-g++ -std=c++17 -pthread -finput-charset=UTF-8 -fexec-charset=GBK memory_pool.cpp -o memory_pool.exe
+g++ -O2 -std=c++17 -pthread -finput-charset=UTF-8 -fexec-charset=GBK memory_pool.cpp -o memory_pool.exe
 ```
 
-## 版本
+## 模块
 
-| 版本 | 内容 |
-|---|---|
-| v1 | SimplePool + HashBucket，单线程安全 |
-| v2 | CAS 无锁 freeList，多线程安全（开发中） |
+| 模块 | 内容 | 状态 |
+| ---- | ---- | ---- |
+| SimplePool | 批发内存切片、链表管理、allocate/deallocate | ✅ |
+| HashBucket | 64 桶多尺寸路由、useMemory/freeMemory | ✅ |
+| CAS freeList | pushFreeList / popFreeList，compare_exchange_weak | ✅ |
+| Block 扩容 | curSlot_ 游标 + allocateNewBlock + padPointer | ✅ |
+| 对外接口 | newElement/deleteElement（placement new） | ✅ |
