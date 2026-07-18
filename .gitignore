@@ -1,5 +1,5 @@
 *.exe
 *.o
 *.obj
-.vscode/
 v1_memory_pool.cpp
+.vscode/
